@@ -66,6 +66,27 @@
       This should be disabled if manual setup is required or if auto-enabling
       causes issues.
 
+      The default (`true`) is inherited from `mkEnableTargetWith`.
+
+    `autoEnableExpr` (String)
+    : A string representation of `autoEnable`, for use in documentation.
+
+      Not required if `autoEnable` is a literal `true` or `false`, but **must**
+      be used when `autoEnable` is a dynamic expression.
+
+      E.g. `"pkgs.stdenv.hostPlatform.isLinux"`.
+
+    `autoWrapEnableExpr` (Boolean)
+    : Whether to automatically wrap `autoEnableExpr` with parenthesis, when it
+      contains a potentially problematic infix.
+
+      The default (`true`) is inherited from `mkEnableTargetWith`.
+
+    `enableExample` (Boolean or literal expression)
+    : An example to include on the enable option. The default is calculated
+      automatically by `mkEnableTargetWith` and depends on `autoEnable` and
+      whether an `autoEnableExpr` is used.
+
     `extraOptions` (Attribute set)
     : Additional options to be added in the `stylix.targets.${name}` namespace
       along the `stylix.targets.${name}.enable` option.
@@ -103,6 +124,11 @@
         }
       )
       ```
+
+      Arguments prefixed with an underscore (`_`) resolve to their non-prefixed
+      counterparts. For example, the `_colors` argument resolves to `colors`.
+      Underscored arguments are considered unused and should never be accessed.
+      Their sole purpose is satisfying `deadnix` in complex configurations.
 
     `generalConfig` (Attribute set or function)
     : This argument mirrors the `configElements` argument but intentionally
@@ -152,12 +178,15 @@
 {
   name,
   humanName,
-  autoEnable ? true,
+  autoEnable ? null,
+  autoEnableExpr ? null,
+  autoWrapEnableExpr ? null,
+  enableExample ? null,
   extraOptions ? { },
   configElements ? [ ],
   generalConfig ? null,
   imports ? [ ],
-}:
+}@args:
 let
   module =
     { config, lib, ... }:
@@ -176,17 +205,20 @@ let
         fn:
         lib.genAttrs (functionArgNames fn) (
           arg:
-          if arg == "cfg" then
+          let
+            trimmedArg = lib.removePrefix "_" arg;
+          in
+          if trimmedArg == "cfg" then
             cfg
-          else if arg == "colors" then
+          else if trimmedArg == "colors" then
             config.lib.stylix.colors
           else
-            config.stylix.${arg}
+            config.stylix.${trimmedArg}
               or (throw "stylix: mkTarget expected one of `cfg`, `colors`, ${
                 lib.concatMapStringsSep ", " (name: "`${name}`") (
                   builtins.attrNames config.stylix
                 )
-              }, but got: ${arg}")
+              }, but got: ${trimmedArg}")
         );
 
       # Call the configuration function with its required Stylix arguments.
@@ -212,7 +244,19 @@ let
       inherit imports;
 
       options.stylix.targets.${name}.enable =
-        config.lib.stylix.mkEnableTarget humanName autoEnable;
+        let
+          enableArgs =
+            {
+              name = humanName;
+            }
+            // lib.optionalAttrs (args ? autoEnable) { inherit autoEnable; }
+            // lib.optionalAttrs (args ? autoEnableExpr) { inherit autoEnableExpr; }
+            // lib.optionalAttrs (args ? autoWrapEnableExpr) {
+              autoWrapExpr = autoWrapEnableExpr;
+            }
+            // lib.optionalAttrs (args ? enableExample) { example = enableExample; };
+        in
+        config.lib.stylix.mkEnableTargetWith enableArgs;
 
       config = lib.mkIf (config.stylix.enable && cfg.enable) (
         lib.mkMerge (

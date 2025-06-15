@@ -10,6 +10,7 @@
   stdenvNoCC,
   mdbook,
   mdbook-alerts,
+  mdbook-linkcheck,
 }:
 
 let
@@ -21,7 +22,6 @@ let
     modules = [
       inputs.home-manager.nixosModules.home-manager
       inputs.self.nixosModules.stylix
-      ./settings.nix
     ];
   };
 
@@ -29,7 +29,6 @@ let
     inherit pkgs;
     modules = [
       inputs.self.homeModules.stylix
-      ./settings.nix
       {
         home = {
           homeDirectory = "/home/book";
@@ -620,6 +619,7 @@ stdenvNoCC.mkDerivation {
   buildInputs = [
     mdbook
     mdbook-alerts
+    mdbook-linkcheck
   ];
 
   inherit extraCSS renderedSummary;
@@ -638,11 +638,12 @@ stdenvNoCC.mkDerivation {
 
   buildPhase = ''
     runHook preBuild
-    mdbook build --dest-dir $out
+    mdbook build
     runHook postBuild
   '';
 
   postBuild = ''
+    cp --recursive book/html $out
     cat $extraCSSPath >>$out/css/general.css
   '';
 }
